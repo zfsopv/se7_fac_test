@@ -5,6 +5,7 @@ use eframe::egui;
 use egui_extras::Column;
 use std::net::Ipv4Addr;
 use std::sync::mpsc::{Receiver, Sender};
+use std::time::Instant;
 
 pub struct FacTestApp {
     interfaces: Vec<NetworkInterface>,
@@ -19,6 +20,7 @@ pub struct FacTestApp {
 
     scanning: bool,
     testing: bool,
+    test_start_time: Option<Instant>,
     show_confirm: bool,
     log_scroll_to_bottom: bool,
 
@@ -62,6 +64,7 @@ impl FacTestApp {
             log_lines: Vec::new(),
             scanning: false,
             testing: false,
+            test_start_time: None,
             show_confirm: false,
             log_scroll_to_bottom: false,
             msg_tx,
@@ -116,6 +119,7 @@ impl FacTestApp {
             });
         if all_done {
             self.testing = false;
+            self.test_start_time = None;
             let ts = chrono::Local::now().format("%H:%M:%S");
             self.log_lines
                 .push(format!("[{}] 所有选中设备测试已完成", ts));
@@ -166,6 +170,7 @@ impl FacTestApp {
         }
 
         self.testing = true;
+        self.test_start_time = Some(Instant::now());
 
         let exe_dir = std::env::current_exe()
             .ok()
@@ -203,7 +208,7 @@ impl FacTestApp {
             .num_columns(2)
             .spacing([12.0, 8.0])
             .show(ui, |ui| {
-                ui.label("网络接口:");
+                ui.label("1. 网络接口:");
                 let iface_text = if self.interfaces.is_empty() {
                     "无可用接口".to_string()
                 } else {
@@ -236,7 +241,7 @@ impl FacTestApp {
                     });
                 ui.end_row();
 
-                ui.label("扫描范围:");
+                ui.label("2. 扫描范围:");
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.scan_start).desired_width(130.0),
@@ -248,7 +253,7 @@ impl FacTestApp {
                 });
                 ui.end_row();
 
-                ui.label("产测程序:");
+                ui.label("3. 产测程序(bm1684x_soc_aging_v3_0_0.tgz):");
                 ui.horizontal(|ui| {
                     ui.add(
                         egui::TextEdit::singleline(&mut self.test_program).desired_width(320.0),
@@ -264,7 +269,7 @@ impl FacTestApp {
                 });
                 ui.end_row();
 
-                ui.label("老化时间:");
+                ui.label("4. 老化时间(由于子测试项不可中断,实际测试时间可能更长):");
                 egui::ComboBox::from_id_salt("duration_combo")
                     .selected_text(self.duration.to_string())
                     .width(120.0)
@@ -317,7 +322,15 @@ impl FacTestApp {
             }
             if self.testing {
                 ui.spinner();
-                ui.label("测试进行中...");
+                if let Some(t0) = self.test_start_time {
+                    let secs = t0.elapsed().as_secs();
+                    let h = secs / 3600;
+                    let m = (secs % 3600) / 60;
+                    let s = secs % 60;
+                    ui.label(format!("测试进行中... {:02}:{:02}:{:02}", h, m, s));
+                } else {
+                    ui.label("测试进行中...");
+                }
             }
         });
     }

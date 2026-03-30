@@ -16,7 +16,8 @@ pub fn device_workflow(
     log_dir: &Path,
 ) {
     let ip = device.ip.clone();
-    let mut flog = FileLogger::new(&log_dir.join(format!("{}.log", ip)));
+    let sn = device.sn.clone();
+    let mut flog = FileLogger::new(&log_dir.join(format!("{}_{}.log", ip, sn)));
 
     // --- 连接 ---
     let sess = match ssh_connect(&ip, &device.username, &device.password) {
@@ -333,14 +334,14 @@ pub fn device_workflow(
 
                 match ssh_exec(
                     &result_sess,
-                    "grep -o 'QA_AGING_PASS\\|QA_AGING_FAILED' /data/aging_output.log | tail -1",
+                    "grep -o 'QA_AGING_PASS\\|QA_AGING_FAILED\\|QA_AGING_FAIL' /data/aging_output.log | tail -1",
                 ) {
                     Ok(marker) => {
                         let marker = marker.trim();
                         if marker.contains("QA_AGING_PASS") {
                             send_log(&tx, &ip, "老化测试通过!");
                             send_state(&tx, &ip, DeviceState::Passed);
-                        } else if marker.contains("QA_AGING_FAILED") {
+                        } else if marker.contains("QA_AGING_FAILED") || marker.contains("QA_AGING_FAIL") {
                             send_log(&tx, &ip, "老化测试失败!");
                             send_state(&tx, &ip, DeviceState::Failed);
                         } else {
@@ -350,7 +351,7 @@ pub fn device_workflow(
                             )
                             .unwrap_or_default();
                             flog.log(&format!("日志尾部:\n{}", tail));
-                            let msg = "未检测到 QA_AGING_PASS/FAILED 标识".to_string();
+                            let msg = "未检测到 QA_AGING_PASS/FAILED/FAIL 标识".to_string();
                             send_log(&tx, &ip, &msg);
                             send_state(&tx, &ip, DeviceState::Error(msg));
                         }
