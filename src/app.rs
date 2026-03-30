@@ -381,26 +381,6 @@ impl FacTestApp {
         }
     }
 
-    fn render_log_panel(&mut self, ui: &mut egui::Ui) {
-        ui.heading("运行日志");
-        ui.separator();
-
-        let mut scroll = egui::ScrollArea::vertical()
-            .auto_shrink([false; 2])
-            .max_height(ui.available_height());
-
-        if self.log_scroll_to_bottom {
-            scroll = scroll.stick_to_bottom(true);
-            self.log_scroll_to_bottom = false;
-        }
-
-        scroll.show(ui, |ui| {
-            for line in &self.log_lines {
-                ui.label(line);
-            }
-        });
-    }
-
     fn render_device_table(&mut self, ui: &mut egui::Ui) {
         ui.heading("设备测试状态");
         ui.separator();
@@ -479,6 +459,25 @@ impl FacTestApp {
                     });
             });
     }
+    fn render_log_panel(&mut self, ui: &mut egui::Ui) {
+        ui.heading("运行日志");
+        ui.separator();
+
+        let mut scroll = egui::ScrollArea::vertical()
+            .auto_shrink([false; 2])
+            .max_height(ui.available_height());
+
+        if self.log_scroll_to_bottom {
+            scroll = scroll.stick_to_bottom(true);
+            self.log_scroll_to_bottom = false;
+        }
+
+        scroll.show(ui, |ui| {
+            for line in &self.log_lines {
+                ui.label(line);
+            }
+        });
+    }
 }
 
 fn state_color(state: &DeviceState) -> egui::Color32 {
@@ -512,14 +511,14 @@ impl eframe::App for FacTestApp {
         });
 
         egui::TopBottomPanel::bottom("bottom_panel")
-            .min_height(200.0)
+            .min_height(150.0)
             .resizable(true)
             .show(ctx, |ui| {
-                self.render_device_table(ui);
+                self.render_log_panel(ui);
             });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            self.render_log_panel(ui);
+            self.render_device_table(ui);
         });
 
         self.render_confirm_dialog(ctx);

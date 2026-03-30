@@ -1,4 +1,5 @@
 use crate::types::*;
+use socket2::{SockRef, TcpKeepalive};
 use std::io::{BufReader, Read, Write};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
@@ -92,7 +93,7 @@ pub fn device_workflow(
         return;
     }
 
-    // --- 解压 ---
+    // --- 解压 (后台执行 + 轮询) ---
     send_state(&tx, &ip, DeviceState::Extracting);
     send_log(&tx, &ip, "开始解压文件...");
     flog.log("开始解压文件");
@@ -106,18 +107,80 @@ pub fn device_workflow(
             return;
         }
     };
-    extract_sess.set_timeout(0); // 解压可能很慢，不设超时
 
-    let extract_cmd = format!("cd /data && tar -xavf {}", file_name);
-    match ssh_exec_with_profile(&extract_sess, &extract_cmd) {
+    let extract_cmd = format!(
+        concat!(
+            "rm -f /tmp/tar_done /tmp/tar.log; ",
+            "nohup sh -c '",
+            ". /etc/profile 2>/dev/null; ",
+            "cd /data && tar -xaf {} > /tmp/tar.log 2>&1; ",
+            "echo $? > /tmp/tar_done",
+            "' </dev/null >/dev/null 2>&1 & echo BG_OK"
+        ),
+        file_name
+    );
+    match ssh_exec(&extract_sess, &extract_cmd) {
         Ok(output) => {
-            flog.log(&format!("解压输出:\n{}", output));
-            send_log(&tx, &ip, "解压完成");
+            if !output.contains("BG_OK") {
+                let msg = "启动后台解压失败".to_string();
+                flog.log(&msg);
+                send_state(&tx, &ip, DeviceState::Error(msg));
+                return;
+            }
         }
         Err(e) => {
-            flog.log(&format!("解压命令报错: {}", e));
-            send_log(&tx, &ip, &format!("解压警告: {}", e));
+            let msg = format!("启动解压命令失败: {}", e);
+            flog.log(&msg);
+            send_state(&tx, &ip, DeviceState::Error(msg));
+            return;
         }
+    }
+    drop(extract_sess);
+
+    let extract_timeout = Duration::from_secs(600);
+    let extract_start = std::time::Instant::now();
+    let mut extract_ok = false;
+
+    loop {
+        std::thread::sleep(Duration::from_secs(3));
+
+        if extract_start.elapsed() > extract_timeout {
+            let msg = "解压超时 (超过10分钟)".to_string();
+            flog.log(&msg);
+            send_state(&tx, &ip, DeviceState::Error(msg));
+            return;
+        }
+
+        let poll_sess = match ssh_connect(&ip, &device.username, &device.password) {
+            Ok(s) => s,
+            Err(_) => continue,
+        };
+
+        match ssh_exec(&poll_sess, "cat /tmp/tar_done 2>/dev/null") {
+            Ok(output) => {
+                let code = output.trim();
+                if !code.is_empty() {
+                    if code == "0" {
+                        send_log(&tx, &ip, "解压完成");
+                        flog.log("解压完成");
+                        extract_ok = true;
+                    } else {
+                        let tar_log =
+                            ssh_exec(&poll_sess, "tail -20 /tmp/tar.log 2>/dev/null")
+                                .unwrap_or_default();
+                        flog.log(&format!("解压失败 (exit={}): {}", code, tar_log));
+                        send_log(&tx, &ip, &format!("解压失败 (exit={})", code));
+                    }
+                    break;
+                }
+            }
+            Err(_) => {}
+        }
+    }
+
+    if !extract_ok {
+        send_state(&tx, &ip, DeviceState::Error("文件解压失败".to_string()));
+        return;
     }
 
     // 验证解压结果
@@ -150,7 +213,7 @@ pub fn device_workflow(
         }
     }
 
-    // --- 启动老化测试 ---
+    // --- 启动老化测试 (后台执行) ---
     send_state(&tx, &ip, DeviceState::Testing);
     let minutes = duration.minutes();
     send_log(&tx, &ip, &format!("启动老化测试 ({}分钟)...", minutes));
@@ -167,13 +230,28 @@ pub fn device_workflow(
     };
 
     let test_cmd = format!(
-        "cd /data/bm1684x_soc_aging && nohup ./bm1684x_soc_aging --restart_all --run_time {} </dev/null >/data/aging_output.log 2>&1 & pid=$!; disown $pid 2>/dev/null; echo $pid",
+        concat!(
+            "rm -f /data/aging_done; ",
+            "nohup sh -c '",
+            ". /etc/profile 2>/dev/null; ",
+            "cd /data/bm1684x_soc_aging && ",
+            "./bm1684x_soc_aging --restart_all --run_time {} ",
+            ">/data/aging_output.log 2>&1; ",
+            "echo $? > /data/aging_done",
+            "' </dev/null >/dev/null 2>&1 & echo BG_OK"
+        ),
         minutes
     );
 
-    match ssh_exec_with_profile(&start_sess, &test_cmd) {
+    flog.log(&format!("执行命令: {}", test_cmd));
+    match ssh_exec(&start_sess, &test_cmd) {
         Ok(output) => {
-            flog.log(&format!("测试进程 PID: {}", output.trim()));
+            if !output.contains("BG_OK") {
+                let msg = "启动后台测试进程失败".to_string();
+                flog.log(&msg);
+                send_state(&tx, &ip, DeviceState::Error(msg));
+                return;
+            }
         }
         Err(e) => {
             let msg = format!("启动测试失败: {}", e);
@@ -184,16 +262,42 @@ pub fn device_workflow(
     }
     drop(start_sess);
 
-    // --- 轮询等待完成 ---
+    std::thread::sleep(Duration::from_secs(2));
+    let check_sess = match ssh_connect(&ip, &device.username, &device.password) {
+        Ok(s) => s,
+        Err(e) => {
+            flog.log(&format!("验证进程启动连接失败: {}", e));
+            send_log(&tx, &ip, "测试进程已提交, 无法确认启动状态");
+            // 继续轮询，不中断
+            ssh_connect(&ip, &device.username, &device.password).ok();
+            ssh2::Session::new().unwrap()
+        }
+    };
+    match ssh_exec(&check_sess, "pgrep -f 'bm1684x_soc_aging --restart_all'") {
+        Ok(output) if !output.trim().is_empty() => {
+            flog.log(&format!("测试进程 PID: {}", output.trim()));
+        }
+        _ => {
+            flog.log("警告: 未检测到测试进程, 可能启动延迟");
+            send_log(&tx, &ip, "警告: 未检测到测试进程");
+        }
+    }
+    drop(check_sess);
+
+    // --- 轮询等待完成 (通过标记文件) ---
     let poll_interval = Duration::from_secs(30);
-    let max_wait = Duration::from_secs((minutes as u64 + 10) * 60);
+    let max_wait = Duration::from_secs((minutes as u64 + 15) * 60);
     let start_time = std::time::Instant::now();
 
     loop {
         std::thread::sleep(poll_interval);
 
         if start_time.elapsed() > max_wait {
-            let msg = "测试超时, 超过预期运行时间".to_string();
+            let msg = format!(
+                "测试超时 (已等待{}分钟, 预期{}分钟)",
+                start_time.elapsed().as_secs() / 60,
+                minutes
+            );
             flog.log(&msg);
             send_state(&tx, &ip, DeviceState::Error(msg));
             return;
@@ -206,40 +310,58 @@ pub fn device_workflow(
                 continue;
             }
         };
+        poll_sess.set_timeout(30_000);
 
-        let check_cmd =
-            "pgrep -f 'bm1684x_soc_aging --restart_all' > /dev/null 2>&1 && echo RUNNING || echo DONE";
-        match ssh_exec(&poll_sess, check_cmd) {
+        match ssh_exec(&poll_sess, "cat /data/aging_done 2>/dev/null") {
             Ok(output) => {
-                let status = output.trim();
-                if status.contains("DONE") {
-                    flog.log("测试进程已结束, 读取结果...");
-                    send_log(&tx, &ip, "测试完成, 检查结果...");
+                let code = output.trim();
+                if code.is_empty() {
+                    continue;
+                }
+                flog.log(&format!("测试进程已结束 (exit={}), 读取结果...", code));
+                send_log(&tx, &ip, "测试完成, 检查结果...");
 
-                    match ssh_exec(&poll_sess, "cat /data/aging_output.log") {
-                        Ok(log_output) => {
-                            flog.log(&format!("测试输出:\n{}", log_output));
+                let result_sess = match ssh_connect(&ip, &device.username, &device.password) {
+                    Ok(s) => s,
+                    Err(e) => {
+                        let msg = format!("读取结果连接失败: {}", e);
+                        flog.log(&msg);
+                        send_state(&tx, &ip, DeviceState::Error(msg));
+                        return;
+                    }
+                };
 
-                            if log_output.contains("QA_AGING_PASS") {
-                                send_log(&tx, &ip, "老化测试通过!");
-                                send_state(&tx, &ip, DeviceState::Passed);
-                            } else if log_output.contains("QA_AGING_FAILED") {
-                                send_log(&tx, &ip, "老化测试失败!");
-                                send_state(&tx, &ip, DeviceState::Failed);
-                            } else {
-                                let msg = "未检测到 QA_AGING_PASS/FAILED 标识".to_string();
-                                send_log(&tx, &ip, &msg);
-                                send_state(&tx, &ip, DeviceState::Error(msg));
-                            }
-                        }
-                        Err(e) => {
-                            let msg = format!("读取测试日志失败: {}", e);
-                            flog.log(&msg);
+                match ssh_exec(
+                    &result_sess,
+                    "grep -o 'QA_AGING_PASS\\|QA_AGING_FAILED' /data/aging_output.log | tail -1",
+                ) {
+                    Ok(marker) => {
+                        let marker = marker.trim();
+                        if marker.contains("QA_AGING_PASS") {
+                            send_log(&tx, &ip, "老化测试通过!");
+                            send_state(&tx, &ip, DeviceState::Passed);
+                        } else if marker.contains("QA_AGING_FAILED") {
+                            send_log(&tx, &ip, "老化测试失败!");
+                            send_state(&tx, &ip, DeviceState::Failed);
+                        } else {
+                            let tail = ssh_exec(
+                                &result_sess,
+                                "tail -30 /data/aging_output.log 2>/dev/null",
+                            )
+                            .unwrap_or_default();
+                            flog.log(&format!("日志尾部:\n{}", tail));
+                            let msg = "未检测到 QA_AGING_PASS/FAILED 标识".to_string();
+                            send_log(&tx, &ip, &msg);
                             send_state(&tx, &ip, DeviceState::Error(msg));
                         }
                     }
-                    return;
+                    Err(e) => {
+                        let msg = format!("读取测试日志失败: {}", e);
+                        flog.log(&msg);
+                        send_state(&tx, &ip, DeviceState::Error(msg));
+                    }
                 }
+                return;
             }
             Err(e) => {
                 flog.log(&format!("轮询检查失败: {}", e));
@@ -268,6 +390,13 @@ fn ssh_connect(ip: &str, user: &str, pass: &str) -> Result<ssh2::Session, String
             }
         };
         tcp.set_nodelay(true).ok();
+        tcp.set_read_timeout(Some(Duration::from_secs(600))).ok();
+        tcp.set_write_timeout(Some(Duration::from_secs(600))).ok();
+        let sock_ref = SockRef::from(&tcp);
+        let keepalive = TcpKeepalive::new()
+            .with_time(Duration::from_secs(15))
+            .with_interval(Duration::from_secs(15));
+        sock_ref.set_tcp_keepalive(&keepalive).ok();
 
         let mut sess = match ssh2::Session::new() {
             Ok(s) => s,
@@ -286,7 +415,7 @@ fn ssh_connect(ip: &str, user: &str, pass: &str) -> Result<ssh2::Session, String
         }
 
         // 握手成功后设置 keepalive 保持连接活跃，不设超时
-        sess.set_keepalive(true, 15);
+        sess.set_keepalive(true, 10);
 
         if let Err(e) = sess.userauth_password(user, pass) {
             return Err(format!("认证失败: {}", e));
@@ -339,7 +468,7 @@ fn sftp_upload(
     tx: &Sender<WorkerMsg>,
     ip: &str,
 ) -> Result<(), String> {
-    sess.set_timeout(0); // 大文件传输不设超时
+    sess.set_timeout(0);
 
     let sftp = sess.sftp().map_err(|e| format!("SFTP 初始化失败: {}", e))?;
 
@@ -355,7 +484,7 @@ fn sftp_upload(
         .map_err(|e| format!("创建远程文件失败: {}", e))?;
 
     let mut reader = BufReader::new(local_file);
-    let mut buf = vec![0u8; 64 * 1024];
+    let mut buf = vec![0u8; 256 * 1024];
     let mut transferred = 0u64;
     let mut last_progress = -1.0f32;
 

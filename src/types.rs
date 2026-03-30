@@ -52,6 +52,7 @@ pub struct DeviceInfo {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum AgingDuration {
+    Min1,
     Min5,
     Min10,
     Min20,
@@ -65,6 +66,7 @@ pub enum AgingDuration {
 impl AgingDuration {
     pub fn minutes(&self) -> u32 {
         match self {
+            Self::Min1 => 1,
             Self::Min5 => 5,
             Self::Min10 => 10,
             Self::Min20 => 20,
@@ -77,6 +79,7 @@ impl AgingDuration {
     }
 
     pub const ALL: &'static [Self] = &[
+        Self::Min1,
         Self::Min5,
         Self::Min10,
         Self::Min20,
@@ -91,6 +94,7 @@ impl AgingDuration {
 impl fmt::Display for AgingDuration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Min1 => write!(f, "1 分钟"),
             Self::Min5 => write!(f, "5 分钟"),
             Self::Min10 => write!(f, "10 分钟"),
             Self::Min20 => write!(f, "20 分钟"),
