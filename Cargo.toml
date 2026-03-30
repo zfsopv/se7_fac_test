@@ -1,0 +1,13 @@
+[package]
+name = "fac_test"
+version = "0.1.0"
+edition = "2021"
+description = "BM1684X 工厂产测工具"
+
+[dependencies]
+eframe = "0.29"
+egui_extras = "0.29"
+ssh2 = "0.9"
+if-addrs = "0.10"
+rfd = "0.14"
+chrono = "0.4"
