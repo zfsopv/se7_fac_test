@@ -1,6 +1,6 @@
-# BM1684X 工厂产测工具
+# BM1684X 局域网批量老化工具
 
-用于 BM1684X SoC 设备的工厂老化测试工具，支持批量扫描局域网设备、自动上传并运行老化测试程序。
+用于 BM1684X SoC 设备的局域网批量老化工具，支持批量扫描局域网设备、自动上传并运行老化测试程序。
 
 ## 功能
 
@@ -8,28 +8,25 @@
 - 多网口选择，自动计算扫描范围
 - 自动扫描局域网 SSH 设备（端口 22）
 - 自动尝试多组凭据登录 (linaro/root/admin)
-- SFTP 上传产测程序（含失败重试）
+- SFTP 上传老化程序（含失败重试）
 - 远程解压并执行老化测试
 - 实时显示各设备测试进度和结果 (QA_AGING_PASS / QA_AGING_FAILED)
 - 按设备 IP 独立保存测试日志
 
-## 构建依赖
+## 构建
 
-### Linux (Debian/Ubuntu)
-
-```bash
-sudo apt install -y build-essential cmake pkg-config libssl-dev
-```
-
-### Linux (Arch)
+### Linux
 
 ```bash
-sudo pacman -S base-devel cmake openssl
+./build-linux.sh
 ```
 
 ### Windows
 
-需要安装 [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) 和 [CMake](https://cmake.org/)。
+在linux下交叉编译
+```bash
+./build-windows.sh
+```
 
 ## 编译
 
@@ -70,7 +67,7 @@ cargo build --release --target x86_64-unknown-linux-musl
 
 ## 使用
 
-1. 将默认产测程序 `bm1684x_soc_aging_v3_0_0.tgz` 放到可执行文件同级目录
+1. 将默认老化程序 `bm1684x_soc_aging_v3_0_0.tgz` 放到可执行文件同级目录
 2. 运行程序（默认端口 8080，可通过参数指定: `./fac_test 9090`）
 3. 程序会自动打开浏览器，也可手动访问 `http://localhost:8080`
 4. 选择网络接口，调整扫描 IP 范围
