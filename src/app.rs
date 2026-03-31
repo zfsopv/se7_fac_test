@@ -5,7 +5,6 @@ use eframe::egui;
 use egui_extras::Column;
 use std::net::Ipv4Addr;
 use std::sync::mpsc::{Receiver, Sender};
-use std::time::Instant;
 
 pub struct FacTestApp {
     interfaces: Vec<NetworkInterface>,
@@ -20,7 +19,6 @@ pub struct FacTestApp {
 
     scanning: bool,
     testing: bool,
-    test_start_time: Option<Instant>,
     show_confirm: bool,
     log_scroll_to_bottom: bool,
 
@@ -64,7 +62,6 @@ impl FacTestApp {
             log_lines: Vec::new(),
             scanning: false,
             testing: false,
-            test_start_time: None,
             show_confirm: false,
             log_scroll_to_bottom: false,
             msg_tx,
@@ -119,7 +116,6 @@ impl FacTestApp {
             });
         if all_done {
             self.testing = false;
-            self.test_start_time = None;
             let ts = chrono::Local::now().format("%H:%M:%S");
             self.log_lines
                 .push(format!("[{}] 所有选中设备测试已完成", ts));
@@ -170,7 +166,6 @@ impl FacTestApp {
         }
 
         self.testing = true;
-        self.test_start_time = Some(Instant::now());
 
         let exe_dir = std::env::current_exe()
             .ok()
@@ -322,15 +317,7 @@ impl FacTestApp {
             }
             if self.testing {
                 ui.spinner();
-                if let Some(t0) = self.test_start_time {
-                    let secs = t0.elapsed().as_secs();
-                    let h = secs / 3600;
-                    let m = (secs % 3600) / 60;
-                    let s = secs % 60;
-                    ui.label(format!("测试进行中... {:02}:{:02}:{:02}", h, m, s));
-                } else {
-                    ui.label("测试进行中...");
-                }
+                ui.label("测试进行中...");
             }
         });
     }
@@ -498,7 +485,7 @@ fn state_color(state: &DeviceState) -> egui::Color32 {
         DeviceState::Passed => egui::Color32::from_rgb(0, 200, 0),
         DeviceState::Failed => egui::Color32::from_rgb(255, 60, 60),
         DeviceState::Error(_) => egui::Color32::from_rgb(255, 140, 0),
-        DeviceState::Testing => egui::Color32::from_rgb(255, 220, 50),
+        DeviceState::Testing(_) => egui::Color32::from_rgb(255, 220, 50),
         DeviceState::Transferring(_) => egui::Color32::from_rgb(100, 180, 255),
         DeviceState::Extracting => egui::Color32::from_rgb(180, 140, 255),
         DeviceState::Discovered => egui::Color32::from_rgb(200, 200, 200),

@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use std::sync::mpsc::Sender;
 use std::time::Duration;
 
-const MAX_UPLOAD_RETRIES: u32 = 3;
+const MAX_UPLOAD_RETRIES: u32 = 7;
 
 pub fn device_workflow(
     device: DeviceInfo,
@@ -215,7 +215,7 @@ pub fn device_workflow(
     }
 
     // --- 启动老化测试 (后台执行) ---
-    send_state(&tx, &ip, DeviceState::Testing);
+    send_state(&tx, &ip, DeviceState::Testing(std::time::Instant::now()));
     let minutes = duration.minutes();
     send_log(&tx, &ip, &format!("启动老化测试 ({}分钟)...", minutes));
     flog.log(&format!("启动老化测试, 时长: {}分钟", minutes));

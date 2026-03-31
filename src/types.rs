@@ -1,5 +1,6 @@
 use std::fmt;
 use std::net::Ipv4Addr;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct NetworkInterface {
@@ -14,12 +15,12 @@ impl fmt::Display for NetworkInterface {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum DeviceState {
     Discovered,
     Transferring(f32),
     Extracting,
-    Testing,
+    Testing(Instant),
     Passed,
     Failed,
     Error(String),
@@ -31,7 +32,13 @@ impl DeviceState {
             Self::Discovered => "已发现".into(),
             Self::Transferring(p) => format!("传输中 {:.0}%", p * 100.0),
             Self::Extracting => "解压中".into(),
-            Self::Testing => "测试中".into(),
+            Self::Testing(start) => {
+                let secs = start.elapsed().as_secs();
+                let h = secs / 3600;
+                let m = (secs % 3600) / 60;
+                let s = secs % 60;
+                format!("测试中 {:02}:{:02}:{:02}", h, m, s)
+            }
             Self::Passed => "通过".into(),
             Self::Failed => "失败".into(),
             Self::Error(e) => format!("错误: {}", e),
