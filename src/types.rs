@@ -85,6 +85,36 @@ impl AgingDuration {
         }
     }
 
+    pub fn to_value(&self) -> &'static str {
+        match self {
+            Self::Min1 => "min1",
+            Self::Min5 => "min5",
+            Self::Min10 => "min10",
+            Self::Min20 => "min20",
+            Self::Min30 => "min30",
+            Self::Hour1 => "hour1",
+            Self::Hour3 => "hour3",
+            Self::Hour6 => "hour6",
+            Self::Hour24 => "hour24",
+        }
+    }
+
+    pub fn from_value(s: &str) -> Option<Self> {
+        match s {
+            "min1" => Some(Self::Min1),
+            "min5" => Some(Self::Min5),
+            "min10" => Some(Self::Min10),
+            "min20" => Some(Self::Min20),
+            "min30" => Some(Self::Min30),
+            "hour1" => Some(Self::Hour1),
+            "hour3" => Some(Self::Hour3),
+            "hour6" => Some(Self::Hour6),
+            "hour24" => Some(Self::Hour24),
+            _ => None,
+        }
+    }
+
+    #[allow(dead_code)]
     pub const ALL: &'static [Self] = &[
         Self::Min1,
         Self::Min5,

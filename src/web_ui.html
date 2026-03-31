@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<title>SE7局域网批量老化程序</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: "Microsoft YaHei", "微软雅黑", "Noto Sans SC", "PingFang SC", "SimHei", sans-serif;
+    font-size: 14px;
+    background: #f0f2f5;
+    color: #333;
+}
+.app-header {
+    background: #1a73e8;
+    color: #fff;
+    padding: 12px 20px;
+    font-size: 18px;
+    font-weight: bold;
+}
+.container {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 12px;
+}
+.panel {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    margin-bottom: 12px;
+    padding: 14px;
+}
+.panel h2 {
+    font-size: 15px;
+    color: #1a73e8;
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #e8e8e8;
+}
+.settings-grid { display: table; width: 100%; }
+.setting-row { display: table-row; }
+.setting-row label {
+    display: table-cell;
+    padding: 5px 12px 5px 0;
+    white-space: nowrap;
+    vertical-align: middle;
+    font-weight: 500;
+    color: #555;
+}
+.setting-row .setting-value {
+    display: table-cell;
+    padding: 5px 0;
+    vertical-align: middle;
+}
+select, input[type="text"] {
+    padding: 5px 8px;
+    border: 1px solid #d9d9d9;
+    border-radius: 3px;
+    font-size: 13px;
+    font-family: inherit;
+}
+select { min-width: 200px; }
+input[type="text"] { min-width: 140px; }
+input[type="text"].wide { min-width: 350px; }
+.hint { color: #999; margin-left: 8px; font-size: 12px; }
+.btn-bar {
+    padding: 8px 0 0;
+    border-top: 1px solid #e8e8e8;
+    margin-top: 8px;
+}
+.btn-bar button {
+    padding: 6px 16px;
+    border: 1px solid #d9d9d9;
+    border-radius: 3px;
+    background: #fff;
+    cursor: pointer;
+    font-size: 13px;
+    font-family: inherit;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+.btn-bar button:hover { background: #f5f5f5; }
+.btn-bar button.primary {
+    background: #1a73e8;
+    color: #fff;
+    border-color: #1a73e8;
+}
+.btn-bar button.primary:hover { background: #1557b0; }
+.btn-bar button:disabled { opacity: 0.5; cursor: not-allowed; }
+.status-indicator {
+    display: inline-block;
+    margin-left: 12px;
+    color: #666;
+    vertical-align: middle;
+}
+.device-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+.device-table th, .device-table td {
+    padding: 6px 8px;
+    border: 1px solid #e8e8e8;
+    text-align: left;
+}
+.device-table th {
+    background: #fafafa;
+    font-weight: 600;
+    color: #555;
+}
+.device-table tr:nth-child(even) { background: #fafafa; }
+.device-table tr:hover { background: #e6f7ff; }
+.no-devices {
+    color: #999;
+    padding: 20px;
+    text-align: center;
+}
+.log-area {
+    max-height: 220px;
+    overflow-y: auto;
+    background: #1e1e1e;
+    color: #d4d4d4;
+    font-family: Consolas, Monaco, "Courier New", monospace;
+    font-size: 12px;
+    padding: 8px;
+    border-radius: 3px;
+    line-height: 1.6;
+}
+.log-area pre {
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+}
+.modal-content {
+    background: #fff;
+    border-radius: 6px;
+    max-width: 750px;
+    max-height: 80vh;
+    margin: 10vh auto;
+    padding: 20px;
+    overflow-y: auto;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.modal-content h2 { font-size: 16px; margin-bottom: 10px; }
+.modal-content p { margin-bottom: 10px; color: #555; }
+.modal-content table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 12px;
+}
+.modal-content table th, .modal-content table td {
+    padding: 5px 8px;
+    border: 1px solid #ddd;
+    font-size: 13px;
+}
+.modal-content table th { background: #f5f5f5; }
+.modal-btn {
+    padding: 8px 24px;
+    background: #1a73e8;
+    color: #fff;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 14px;
+    font-family: inherit;
+}
+.modal-btn:hover { background: #1557b0; }
+</style>
+</head>
+<body>
+
+<div class="app-header">SE7局域网批量老化程序</div>
+
+<div class="container">
+    <div class="panel">
+        <h2>测试配置</h2>
+        <div class="settings-grid">
+            <div class="setting-row">
+                <label>1. 网络接口:</label>
+                <div class="setting-value">
+                    <select id="iface-select" onchange="onIfaceChange()"></select>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label>2. 扫描范围:</label>
+                <div class="setting-value">
+                    <input type="text" id="scan-start" onchange="syncSettings()">&nbsp; 至 &nbsp;<input type="text" id="scan-end" onchange="syncSettings()">
+                </div>
+            </div>
+            <div class="setting-row">
+                <label>3. 产测程序:</label>
+                <div class="setting-value">
+                    <input type="text" id="test-program" class="wide"
+                           onchange="syncSettings()"
+                           placeholder="服务器端路径, 如 /path/to/bm1684x_soc_aging_v3_0_0.tgz">
+                </div>
+            </div>
+            <div class="setting-row">
+                <label>4. 老化时间:</label>
+                <div class="setting-value">
+                    <select id="duration-select" onchange="syncSettings()">
+                        <option value="min1">1 分钟</option>
+                        <option value="min5" selected>5 分钟</option>
+                        <option value="min10">10 分钟</option>
+                        <option value="min20">20 分钟</option>
+                        <option value="min30">30 分钟</option>
+                        <option value="hour1">1 小时</option>
+                        <option value="hour3">3 小时</option>
+                        <option value="hour6">6 小时</option>
+                        <option value="hour24">24 小时</option>
+                    </select>
+                    <span class="hint">由于子测试项不可中断,实际测试时间可能更长</span>
+                </div>
+            </div>
+            <div class="setting-row">
+                <label>5. 上传缓冲区:</label>
+                <div class="setting-value">
+                    <select id="buf-select" onchange="syncSettings()">
+                        <option value="4">4 KB</option>
+                        <option value="8">8 KB</option>
+                        <option value="16">16 KB</option>
+                        <option value="32">32 KB</option>
+                        <option value="64">64 KB</option>
+                        <option value="128">128 KB</option>
+                        <option value="256">256 KB</option>
+                        <option value="512">512 KB</option>
+                        <option value="1024">1024 KB</option>
+                    </select>
+                    <span class="hint">网速较差时请调小此值,避免传输超时</span>
+                </div>
+            </div>
+        </div>
+        <div class="btn-bar">
+            <button id="btn-scan" class="primary" onclick="startScan()">开始扫描</button>
+            <button id="btn-test" class="primary" onclick="startTest()">开始测试</button>
+            <button id="btn-select-all" onclick="selectAll()" style="display:none">全选</button>
+            <button id="btn-deselect-all" onclick="deselectAll()" style="display:none">全不选</button>
+            <span id="status-text" class="status-indicator"></span>
+        </div>
+    </div>
+
+    <div class="panel">
+        <h2>设备测试状态</h2>
+        <p class="no-devices" id="no-devices">暂无设备, 请先扫描网络</p>
+        <table class="device-table" id="device-table" style="display:none">
+            <thead>
+                <tr>
+                    <th style="width:40px;text-align:center"></th>
+                    <th style="width:40px">#</th>
+                    <th>SN</th>
+                    <th>IP 地址</th>
+                    <th>MAC 地址</th>
+                    <th>SSH 账户</th>
+                    <th>测试状态</th>
+                </tr>
+            </thead>
+            <tbody id="device-tbody"></tbody>
+        </table>
+    </div>
+
+    <div class="panel">
+        <h2>运行日志</h2>
+        <div class="log-area" id="log-area"><pre id="log-pre"></pre></div>
+    </div>
+</div>
+
+<div id="confirm-modal" class="modal-overlay">
+    <div class="modal-content">
+        <h2>扫描结果</h2>
+        <p id="confirm-text"></p>
+        <table>
+            <thead>
+                <tr>
+                    <th>SN</th><th>IP 地址</th><th>MAC 地址</th><th>用户名</th><th>密码</th>
+                </tr>
+            </thead>
+            <tbody id="confirm-tbody"></tbody>
+        </table>
+        <button class="modal-btn" onclick="confirmDevices()">确认</button>
+    </div>
+</div>
+
+<script>
+var lastLogCount = 0;
+var ifaceInited = false;
+
+function post(url, data, cb) {
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", url, true);
+    xhr.setRequestHeader("Content-Type", "application/json");
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4 && cb) {
+            cb(xhr.status === 200 ? JSON.parse(xhr.responseText) : null);
+        }
+    };
+    xhr.send(data ? JSON.stringify(data) : "");
+}
+
+function fetchState() {
+    var xhr = new XMLHttpRequest();
+    xhr.open("GET", "/api/state", true);
+    xhr.onreadystatechange = function() {
+        if (xhr.readyState === 4 && xhr.status === 200) {
+            try {
+                var st = JSON.parse(xhr.responseText);
+                updateUI(st);
+            } catch(e) {}
+        }
+    };
+    xhr.send();
+}
+
+function esc(s) {
+    if (!s) return "";
+    var d = document.createElement("div");
+    d.appendChild(document.createTextNode(s));
+    return d.innerHTML;
+}
+
+function updateUI(st) {
+    var sel = document.getElementById("iface-select");
+    if (!ifaceInited && st.interfaces.length > 0) {
+        sel.innerHTML = "";
+        for (var i = 0; i < st.interfaces.length; i++) {
+            var o = document.createElement("option");
+            o.value = i;
+            o.text = st.interfaces[i].display;
+            sel.appendChild(o);
+        }
+        if (st.interfaces.length === 0) {
+            var o = document.createElement("option");
+            o.text = "无可用接口";
+            sel.appendChild(o);
+        }
+        ifaceInited = true;
+    }
+    sel.selectedIndex = st.selected_iface_idx;
+
+    var scanStart = document.getElementById("scan-start");
+    var scanEnd = document.getElementById("scan-end");
+    if (document.activeElement !== scanStart) scanStart.value = st.scan_start;
+    if (document.activeElement !== scanEnd) scanEnd.value = st.scan_end;
+
+    var prog = document.getElementById("test-program");
+    if (document.activeElement !== prog) prog.value = st.test_program;
+
+    document.getElementById("duration-select").value = st.duration_value;
+
+    var bufSel = document.getElementById("buf-select");
+    if (document.activeElement !== bufSel) bufSel.value = String(st.upload_buf_kb);
+
+    var canScan = !st.scanning && !st.testing && st.interfaces.length > 0;
+    var hasSel = false;
+    for (var i = 0; i < st.devices.length; i++) {
+        if (st.devices[i].selected) { hasSel = true; break; }
+    }
+    var canTest = !st.scanning && !st.testing && hasSel;
+
+    document.getElementById("btn-scan").disabled = !canScan;
+    document.getElementById("btn-test").disabled = !canTest;
+
+    var bsa = document.getElementById("btn-select-all");
+    var bda = document.getElementById("btn-deselect-all");
+    if (st.devices.length > 0 && !st.testing) {
+        bsa.style.display = "";
+        bda.style.display = "";
+    } else {
+        bsa.style.display = "none";
+        bda.style.display = "none";
+    }
+
+    var statusText = document.getElementById("status-text");
+    if (st.scanning) {
+        statusText.innerHTML = "\u23f3 \u6b63\u5728\u626b\u63cf\u7f51\u7edc...";
+    } else if (st.testing) {
+        statusText.innerHTML = "\u23f3 \u6d4b\u8bd5\u8fdb\u884c\u4e2d...";
+    } else {
+        statusText.innerHTML = "";
+    }
+
+    var nodev = document.getElementById("no-devices");
+    var dtbl = document.getElementById("device-table");
+    var tbody = document.getElementById("device-tbody");
+
+    if (st.devices.length === 0) {
+        nodev.style.display = "";
+        dtbl.style.display = "none";
+    } else {
+        nodev.style.display = "none";
+        dtbl.style.display = "";
+        var h = "";
+        for (var i = 0; i < st.devices.length; i++) {
+            var d = st.devices[i];
+            var chk = d.selected ? " checked" : "";
+            var dis = st.testing ? " disabled" : "";
+            h += "<tr>";
+            h += '<td style="text-align:center"><input type="checkbox"' + chk + dis + " onchange=\"toggleDevice(" + i + ')">';
+            h += "</td>";
+            h += "<td>" + (i + 1) + "</td>";
+            h += "<td>" + esc(d.sn) + "</td>";
+            h += "<td>" + esc(d.ip) + "</td>";
+            h += "<td>" + esc(d.mac) + "</td>";
+            h += "<td>" + esc(d.username) + ":" + esc(d.password) + "</td>";
+            h += '<td style="color:' + d.state_color + ";font-weight:bold\">" + esc(d.state_label) + "</td>";
+            h += "</tr>";
+        }
+        tbody.innerHTML = h;
+    }
+
+    if (st.log_lines.length !== lastLogCount) {
+        var logPre = document.getElementById("log-pre");
+        var logText = "";
+        for (var i = 0; i < st.log_lines.length; i++) {
+            logText += esc(st.log_lines[i]) + "\n";
+        }
+        logPre.innerHTML = logText;
+        lastLogCount = st.log_lines.length;
+        var logArea = document.getElementById("log-area");
+        logArea.scrollTop = logArea.scrollHeight;
+    }
+
+    var modal = document.getElementById("confirm-modal");
+    if (st.show_confirm) {
+        modal.style.display = "block";
+        document.getElementById("confirm-text").textContent =
+            "\u5df2\u53d1\u73b0 " + st.devices.length + " \u53f0\u53ef\u8fde\u63a5\u8bbe\u5907\uff0c\u8bf7\u5728\u4e0b\u65b9\u5217\u8868\u4e2d\u67e5\u770b\u540e\u70b9\u51fb\u300c\u786e\u8ba4\u300d\uff0c\u7136\u540e\u5728\u4e3b\u754c\u9762\u9009\u62e9\u8bbe\u5907\u5e76\u70b9\u51fb\u300c\u5f00\u59cb\u6d4b\u8bd5\u300d";
+        var ch = "";
+        for (var i = 0; i < st.devices.length; i++) {
+            var d = st.devices[i];
+            ch += "<tr>";
+            ch += "<td>" + esc(d.sn) + "</td>";
+            ch += "<td>" + esc(d.ip) + "</td>";
+            ch += "<td>" + esc(d.mac) + "</td>";
+            ch += "<td>" + esc(d.username) + "</td>";
+            ch += "<td>" + esc(d.password) + "</td>";
+            ch += "</tr>";
+        }
+        document.getElementById("confirm-tbody").innerHTML = ch;
+    } else {
+        modal.style.display = "none";
+    }
+}
+
+function syncSettings() {
+    post("/api/update-settings", {
+        test_program: document.getElementById("test-program").value,
+        scan_start: document.getElementById("scan-start").value,
+        scan_end: document.getElementById("scan-end").value,
+        duration: document.getElementById("duration-select").value,
+        upload_buf_kb: parseInt(document.getElementById("buf-select").value, 10)
+    });
+}
+
+function onIfaceChange() {
+    var idx = document.getElementById("iface-select").selectedIndex;
+    post("/api/set-interface", {idx: idx});
+}
+
+function startScan() {
+    post("/api/scan", {
+        scan_start: document.getElementById("scan-start").value,
+        scan_end: document.getElementById("scan-end").value
+    });
+}
+
+function startTest() {
+    post("/api/test", {
+        test_program: document.getElementById("test-program").value,
+        duration: document.getElementById("duration-select").value,
+        upload_buf_kb: parseInt(document.getElementById("buf-select").value, 10)
+    });
+}
+
+function toggleDevice(idx) { post("/api/toggle-device", {idx: idx}); }
+function selectAll() { post("/api/select-all"); }
+function deselectAll() { post("/api/deselect-all"); }
+function confirmDevices() { post("/api/confirm"); }
+
+fetchState();
+setInterval(fetchState, 500);
+</script>
+</body>
+</html>

@@ -12,6 +12,7 @@ pub fn device_workflow(
     device: DeviceInfo,
     program_path: &str,
     duration: AgingDuration,
+    upload_buf_size: usize,
     tx: Sender<WorkerMsg>,
     log_dir: &Path,
 ) {
@@ -69,7 +70,7 @@ pub fn device_workflow(
             }
         };
 
-        match sftp_upload(&upload_sess, program_path, &remote_path, &tx, &ip) {
+        match sftp_upload(&upload_sess, program_path, &remote_path, upload_buf_size, &tx, &ip) {
             Ok(()) => {
                 send_log(&tx, &ip, "文件上传完成");
                 flog.log("文件上传完成");
@@ -466,6 +467,7 @@ fn sftp_upload(
     sess: &ssh2::Session,
     local_path: &str,
     remote_path: &str,
+    buf_size: usize,
     tx: &Sender<WorkerMsg>,
     ip: &str,
 ) -> Result<(), String> {
@@ -484,8 +486,9 @@ fn sftp_upload(
         .create(Path::new(remote_path))
         .map_err(|e| format!("创建远程文件失败: {}", e))?;
 
+    let actual_buf_size = if buf_size == 0 { 64 * 1024 } else { buf_size };
     let mut reader = BufReader::new(local_file);
-    let mut buf = vec![0u8; 256 * 1024];
+    let mut buf = vec![0u8; actual_buf_size];
     let mut transferred = 0u64;
     let mut last_progress = -1.0f32;
 
