@@ -13,7 +13,7 @@
 - 实时显示各设备测试进度和结果 (QA_AGING_PASS / QA_AGING_FAILED)
 - 按设备 IP 独立保存测试日志
 
-## 构建
+## 构建(docker容器中编译)
 
 ### Linux
 
@@ -24,43 +24,6 @@
 ### Windows
 
 在linux下交叉编译
-```bash
-./build-windows.sh
-```
-
-## 编译
-
-### 本机编译
-
-```bash
-cargo build --release
-```
-
-编译产物位于 `target/release/fac_test`。
-
-如需生成静态链接版本（需安装 musl 工具链）：
-
-```bash
-# Arch: sudo pacman -S musl
-# Debian/Ubuntu: sudo apt install musl-tools
-rustup target add x86_64-unknown-linux-musl
-cargo build --release --target x86_64-unknown-linux-musl
-```
-
-静态链接产物位于 `target/x86_64-unknown-linux-musl/release/fac_test`。
-
-### Docker 容器编译（推荐）
-
-#### Linux (Alpine musl 静态链接, 兼容所有 Linux 发行版)
-
-```bash
-./build-linux.sh
-```
-
-基于 Alpine 容器使用 musl 编译，生成完全静态链接的二进制文件。无需依赖任何系统动态库，可直接在 Ubuntu 16.04、CentOS 7、Debian 8 等任意 Linux 发行版上运行。
-
-#### Windows (32位版本)
-
 ```bash
 ./build-windows.sh
 ```
